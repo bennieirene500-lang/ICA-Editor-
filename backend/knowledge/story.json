@@ -1,0 +1,38 @@
+{
+  "id": "story",
+  "label": "Story",
+  "purpose": "Help the viewer feel the story and stay curious.",
+  "pacing": {
+    "style": "emotional",
+    "pausePreservation": 0.42,
+    "maximumSingleRemovalSeconds": 1.6
+  },
+  "captions": {
+    "maxWords": 6,
+    "maxDuration": 3.0,
+    "maxChars": 42
+  },
+  "camera": {
+    "maximumPunchIns": 3,
+    "minimumSpacingSeconds": 9,
+    "punchDurationSeconds": 2.3,
+    "zoomScale": 1.075
+  },
+  "visuals": {
+    "supportLevel": "medium",
+    "minimumOpportunities": 2,
+    "preferredTypes": [
+      "chapter-card",
+      "quote-card",
+      "timeline",
+      "turning-point-card",
+      "location-card"
+    ]
+  },
+  "principles": [
+    "Preserve emotional pauses.",
+    "Reveal information gradually.",
+    "Use supporting visuals sparingly but meaningfully.",
+    "Stay on the speaker when the face carries the emotion."
+  ]
+}

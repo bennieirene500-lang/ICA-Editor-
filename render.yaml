@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: ica-ai-producer-beta
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    maxShutdownDelaySeconds: 300
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ICA_AUTH_MODE
+        value: required
+      - key: FFMPEG_PATH
+        value: /usr/bin/ffmpeg
+      - key: OUTPUT_TTL_MINUTES
+        value: "45"
+      - key: MAX_CONCURRENT_JOBS
+        value: "1"
+      - key: MAX_PENDING_JOBS
+        value: "5"
+      - key: MAX_UPLOAD_MB
+        value: "500"
+      - key: DEFAULT_BETA_VIDEO_ALLOWANCE
+        value: "5"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false

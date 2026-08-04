@@ -1,0 +1,38 @@
+{
+  "id": "sales",
+  "label": "Sales",
+  "purpose": "Help the viewer understand the value and take the next step.",
+  "pacing": {
+    "style": "energetic",
+    "pausePreservation": 0.24,
+    "maximumSingleRemovalSeconds": 2.7
+  },
+  "captions": {
+    "maxWords": 4,
+    "maxDuration": 2.1,
+    "maxChars": 30
+  },
+  "camera": {
+    "maximumPunchIns": 5,
+    "minimumSpacingSeconds": 5.2,
+    "punchDurationSeconds": 1.5,
+    "zoomScale": 1.1
+  },
+  "visuals": {
+    "supportLevel": "high",
+    "minimumOpportunities": 3,
+    "preferredTypes": [
+      "benefit-card",
+      "before-after",
+      "number-counter",
+      "proof-stat",
+      "call-to-action-card"
+    ]
+  },
+  "principles": [
+    "Reinforce benefits clearly.",
+    "Use evidence when claims are made.",
+    "Increase energy around value and action.",
+    "Avoid visual clutter that weakens trust."
+  ]
+}

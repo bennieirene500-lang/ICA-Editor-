@@ -1,0 +1,24 @@
+{
+  "name": "ica-ai-producer-m10-render-supabase-beta",
+  "version": "10.0.0",
+  "private": true,
+  "description": "ICA Milestone 10: single-service Render deployment, Supabase beta authentication and monthly video allowances, OpenAI Producer Brain, FFmpeg production pipeline",
+  "type": "module",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "node --watch backend/server.js",
+    "check": "node scripts/check-project.js",
+    "test": "node tests/visual-engine.test.js && node tests/motion-engine.test.js && node --test tests/foundation.test.js",
+    "verify": "npm run check && npm test",
+    "preflight": "node scripts/preflight.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "16.6.1",
+    "express": "5.1.0",
+    "multer": "2.0.2",
+    "openai": "5.12.2"
+  }
+}

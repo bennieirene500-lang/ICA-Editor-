@@ -1,0 +1,38 @@
+{
+  "id": "motivation",
+  "label": "Motivation",
+  "purpose": "Build energy, confidence, and momentum.",
+  "pacing": {
+    "style": "rising",
+    "pausePreservation": 0.27,
+    "maximumSingleRemovalSeconds": 2.4
+  },
+  "captions": {
+    "maxWords": 4,
+    "maxDuration": 2.2,
+    "maxChars": 31
+  },
+  "camera": {
+    "maximumPunchIns": 5,
+    "minimumSpacingSeconds": 5.8,
+    "punchDurationSeconds": 1.7,
+    "zoomScale": 1.095
+  },
+  "visuals": {
+    "supportLevel": "high",
+    "minimumOpportunities": 3,
+    "preferredTypes": [
+      "quote-card",
+      "progress-counter",
+      "challenge-card",
+      "momentum-graph",
+      "final-message-card"
+    ]
+  },
+  "principles": [
+    "Build intensity over time.",
+    "Reward emotional peaks.",
+    "Highlight action-oriented language.",
+    "Finish with clear momentum."
+  ]
+}

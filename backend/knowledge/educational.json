@@ -1,0 +1,38 @@
+{
+  "id": "educational",
+  "label": "Educational",
+  "purpose": "Help the viewer understand and remember an idea.",
+  "pacing": {
+    "style": "steady",
+    "pausePreservation": 0.34,
+    "maximumSingleRemovalSeconds": 2.0
+  },
+  "captions": {
+    "maxWords": 6,
+    "maxDuration": 2.8,
+    "maxChars": 40
+  },
+  "camera": {
+    "maximumPunchIns": 3,
+    "minimumSpacingSeconds": 8,
+    "punchDurationSeconds": 2.0,
+    "zoomScale": 1.07
+  },
+  "visuals": {
+    "supportLevel": "high",
+    "minimumOpportunities": 2,
+    "preferredTypes": [
+      "concept-card",
+      "three-step-diagram",
+      "growth-graph",
+      "comparison-card",
+      "timeline"
+    ]
+  },
+  "principles": [
+    "Visualise concepts that are easier to understand than to describe.",
+    "Reduce cognitive overload.",
+    "Keep the speaker credible and easy to follow.",
+    "Use movement to support explanation, not distract from it."
+  ]
+}
