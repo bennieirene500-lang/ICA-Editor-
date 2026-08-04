@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+node_modules/
+uploads/
+outputs/
+temp/
+.DS_Store
+*.log
+*.zip
+coverage/
