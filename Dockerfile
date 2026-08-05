@@ -6,7 +6,8 @@ RUN apt-get update \
     ffmpeg \
     fontconfig \
     fonts-dejavu-core \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && fc-cache -f -v
 
 WORKDIR /app
 
