@@ -24,8 +24,13 @@ export class JobQueue {
       return Promise.reject(new QueueFullError());
     }
 
+    const enqueuedAt = Date.now();
+    console.log(
+      `[ICA][queue] enqueued | active=${this.active} | pending=${this.pending.length} | maxConcurrent=${this.maxConcurrent}`
+    );
+
     return new Promise((resolve, reject) => {
-      this.pending.push({ task, resolve, reject });
+      this.pending.push({ task, resolve, reject, enqueuedAt });
       this.#drain();
     });
   }
@@ -33,6 +38,10 @@ export class JobQueue {
   #drain() {
     while (this.active < this.maxConcurrent && this.pending.length) {
       const entry = this.pending.shift();
+      const waitedMs = Date.now() - entry.enqueuedAt;
+      console.log(
+        `[ICA][queue] starting job | waitedMs=${waitedMs} | active=${this.active + 1} | pending=${this.pending.length}`
+      );
       this.active += 1;
 
       Promise.resolve()
@@ -40,6 +49,7 @@ export class JobQueue {
         .then(entry.resolve, entry.reject)
         .finally(() => {
           this.active -= 1;
+          console.log(`[ICA][queue] job slot freed | active=${this.active} | pending=${this.pending.length}`);
           this.#drain();
         });
     }

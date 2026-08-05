@@ -5,6 +5,7 @@ import path from 'node:path';
 import express from 'express';
 import multer from 'multer';
 
+import { createStageTimer } from '../utils/stageTimer.js';
 import { detectSilence } from '../processor/detectSilence.js';
 import { probeVideo } from '../processor/probeVideo.js';
 import { buildPausePlan } from '../processor/buildPausePlan.js';
@@ -47,7 +48,13 @@ export function createCaptionRouter({
 
   router.post('/caption-video', requireUser, upload.single('video'), async (req, res, next) => {
     const inputPath = req.file?.path;
+    const uploadReceivedAt = Date.now();
+
     if (!req.file || !inputPath) return res.status(400).json({ error: 'Please select a video first.' });
+
+    console.log(
+      `[ICA] upload received | file=${req.file.originalname} | bytes=${req.file.size} | mimetype=${req.file.mimetype}`
+    );
 
     try {
       const result = await jobQueue.run(() => produceVideo({
@@ -58,7 +65,8 @@ export function createCaptionRouter({
         outputsDir,
         ffmpegPath,
         usageService,
-        outputRegistry
+        outputRegistry,
+        uploadReceivedAt
       }));
       res.json(result);
     } catch (error) {
@@ -71,7 +79,7 @@ export function createCaptionRouter({
   return router;
 }
 
-async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, usageService, outputRegistry }) {
+async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, usageService, outputRegistry, uploadReceivedAt }) {
   const communicationGoal = String(req.body?.communicationGoal || '').trim().toLowerCase();
   if (!communicationGoal) {
     const error = new Error('Tell ICA what you want this video to achieve.');
@@ -88,6 +96,11 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
   }
 
   const jobId = crypto.randomUUID();
+  const timer = createStageTimer(jobId);
+  if (uploadReceivedAt) {
+    timer.mark(`queued for ${Date.now() - uploadReceivedAt}ms before job start`);
+  }
+
   const tightenedPath = path.join(tempDir, `${jobId}-tightened.mp4`);
   const directedPath = path.join(tempDir, `${jobId}-directed.mp4`);
   const audioPath = path.join(tempDir, `${jobId}.mp3`);
@@ -99,12 +112,17 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
   let preserveOutputArtifacts = false;
 
   try {
-    const originalMetadata = await probeVideo({ ffmpegPath, inputPath });
-    const claim = await usageService.claim({
-      user: req.auth.user,
-      jobId,
-      durationSeconds: originalMetadata.duration
-    });
+    const originalMetadata = await timer.stage('probeVideo (original)', () =>
+      probeVideo({ ffmpegPath, inputPath })
+    );
+
+    const claim = await timer.stage('usageService.claim', () =>
+      usageService.claim({
+        user: req.auth.user,
+        jobId,
+        durationSeconds: originalMetadata.duration
+      })
+    );
 
     if (!claim.allowed) {
       const error = new Error('You have used the videos included for this month.');
@@ -115,107 +133,148 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
     }
     allowanceClaimed = true;
 
-    const silenceRanges = await detectSilence({
-      ffmpegPath,
-      inputPath,
-      noiseDb: -38,
-      minimumSilenceSeconds: 0.85
-    });
+    const silenceRanges = await timer.stage('detectSilence', () =>
+      detectSilence({
+        ffmpegPath,
+        inputPath,
+        noiseDb: -38,
+        minimumSilenceSeconds: 0.85
+      })
+    );
 
-    const pausePlan = buildPausePlan({
-      silenceRanges,
-      videoDuration: originalMetadata.duration,
-      preserveSeconds: 0.28,
-      minimumRemovalSeconds: 0.42,
-      maximumSingleRemovalSeconds: 2.5
-    });
+    const pausePlan = await timer.stage('buildPausePlan', () =>
+      buildPausePlan({
+        silenceRanges,
+        videoDuration: originalMetadata.duration,
+        preserveSeconds: 0.28,
+        minimumRemovalSeconds: 0.42,
+        maximumSingleRemovalSeconds: 2.5
+      })
+    );
 
-    await removePauses({
-      ffmpegPath,
-      inputPath,
-      outputPath: tightenedPath,
-      keepSegments: pausePlan.keepSegments
-    });
+    await timer.stage('removePauses (ffmpeg pass 1/3)', () =>
+      removePauses({
+        ffmpegPath,
+        inputPath,
+        outputPath: tightenedPath,
+        keepSegments: pausePlan.keepSegments
+      })
+    );
 
-    const tightenedMetadata = await probeVideo({ ffmpegPath, inputPath: tightenedPath });
-    await extractAudio({ ffmpegPath, inputPath: tightenedPath, audioPath });
+    const tightenedMetadata = await timer.stage('probeVideo (tightened)', () =>
+      probeVideo({ ffmpegPath, inputPath: tightenedPath })
+    );
 
-    const transcription = await transcribeAudio({ apiKey, audioPath });
-    const meaningAnalysis = analyseMeaning(transcription.words);
-    const producerDecision = createProducerDecision({
-      goal: communicationGoal,
-      transcript: transcription.text,
-      meaningAnalysis,
-      duration: tightenedMetadata.duration
-    });
+    await timer.stage('extractAudio', () =>
+      extractAudio({ ffmpegPath, inputPath: tightenedPath, audioPath })
+    );
 
-    const directorPlan = buildDirectorPlan({
-      analyses: meaningAnalysis,
-      videoDuration: tightenedMetadata.duration,
-      maximumPunchIns: producerDecision.camera.maximumPunchIns,
-      minimumSpacingSeconds: producerDecision.camera.minimumSpacingSeconds,
-      punchDurationSeconds: producerDecision.camera.punchDurationSeconds,
-      zoomScale: producerDecision.camera.zoomScale
-    });
+    const transcription = await timer.stage('transcribeAudio (OpenAI Whisper)', () =>
+      transcribeAudio({ apiKey, audioPath })
+    );
 
-    await renderDirectorVideo({
-      ffmpegPath,
-      inputPath: tightenedPath,
-      outputPath: directedPath,
-      segments: directorPlan.segments,
-      width: tightenedMetadata.width,
-      height: tightenedMetadata.height
-    });
+    const meaningAnalysis = await timer.stage('analyseMeaning', () =>
+      analyseMeaning(transcription.words)
+    );
 
-    const captions = buildCaptionGroups(transcription.words, producerDecision.captions);
+    const producerDecision = await timer.stage('createProducerDecision', () =>
+      createProducerDecision({
+        goal: communicationGoal,
+        transcript: transcription.text,
+        meaningAnalysis,
+        duration: tightenedMetadata.duration
+      })
+    );
+
+    const directorPlan = await timer.stage('buildDirectorPlan', () =>
+      buildDirectorPlan({
+        analyses: meaningAnalysis,
+        videoDuration: tightenedMetadata.duration,
+        maximumPunchIns: producerDecision.camera.maximumPunchIns,
+        minimumSpacingSeconds: producerDecision.camera.minimumSpacingSeconds,
+        punchDurationSeconds: producerDecision.camera.punchDurationSeconds,
+        zoomScale: producerDecision.camera.zoomScale
+      })
+    );
+
+    await timer.stage('renderDirectorVideo (ffmpeg pass 2/3)', () =>
+      renderDirectorVideo({
+        ffmpegPath,
+        inputPath: tightenedPath,
+        outputPath: directedPath,
+        segments: directorPlan.segments,
+        width: tightenedMetadata.width,
+        height: tightenedMetadata.height
+      })
+    );
+
+    const captions = await timer.stage('buildCaptionGroups', () =>
+      buildCaptionGroups(transcription.words, producerDecision.captions)
+    );
     if (!captions.length) throw new Error('ICA could not detect clear speech in this recording.');
 
-    const visualPlan = buildVisualPlan({
-      producerDecision,
-      meaningAnalysis,
-      transcript: transcription.text,
-      duration: tightenedMetadata.duration,
-      cameraDecisions: directorPlan.decisions
-    });
-    const soundCues = buildSoundCues(visualPlan);
+    const visualPlan = await timer.stage('buildVisualPlan', () =>
+      buildVisualPlan({
+        producerDecision,
+        meaningAnalysis,
+        transcript: transcription.text,
+        duration: tightenedMetadata.duration,
+        cameraDecisions: directorPlan.decisions
+      })
+    );
 
-    await Promise.all([
-      fsp.writeFile(productionAssPath, createProductionAss({ captions, visuals: visualPlan, includeCaptions: true }), 'utf8'),
-      fsp.writeFile(visualOnlyAssPath, createProductionAss({ captions, visuals: visualPlan, includeCaptions: false }), 'utf8')
-    ]);
+    const soundCues = await timer.stage('buildSoundCues', () => buildSoundCues(visualPlan));
 
-    await renderProductionVideo({
-      ffmpegPath,
-      inputPath: directedPath,
-      subtitlePath: productionAssPath,
-      outputPath,
-      soundCues
-    });
+    await timer.stage('write .ass subtitle files', () =>
+      Promise.all([
+        fsp.writeFile(productionAssPath, createProductionAss({ captions, visuals: visualPlan, includeCaptions: true }), 'utf8'),
+        fsp.writeFile(visualOnlyAssPath, createProductionAss({ captions, visuals: visualPlan, includeCaptions: false }), 'utf8')
+      ])
+    );
+
+    await timer.stage('renderProductionVideo (ffmpeg pass 3/3, subtitles+sound)', () =>
+      renderProductionVideo({
+        ffmpegPath,
+        inputPath: directedPath,
+        subtitlePath: productionAssPath,
+        outputPath,
+        soundCues
+      })
+    );
 
     const safeBaseName = sanitizeBaseName(req.file.originalname);
-    outputRegistry.register({
-      jobId,
-      userId: req.auth.user.id,
-      captionedPath: outputPath,
-      directedPath,
-      visualOnlyAssPath,
-      soundCues,
-      safeBaseName
-    });
+    await timer.stage('outputRegistry.register', () =>
+      outputRegistry.register({
+        jobId,
+        userId: req.auth.user.id,
+        captionedPath: outputPath,
+        directedPath,
+        visualOnlyAssPath,
+        soundCues,
+        safeBaseName
+      })
+    );
     preserveOutputArtifacts = true;
 
-    await usageService.finish({ jobId, status: 'completed', outputCount: 1 }).catch(error => {
-      console.error('ICA usage completion warning:', error?.code || error?.message || error);
-    });
-    const member = await usageService.getSummary(req.auth.user).catch(() => ({
-      displayName: req.auth.user.user_metadata?.display_name || 'ICA Member',
-      monthlyVideoAllowance: null,
-      videosUsed: null,
-      videosRemaining: claim.videosRemaining,
-      periodStart: null,
-      isActive: true,
-      unlimited: Boolean(claim.unlimited)
-    }));
+    await timer.stage('usageService.finish', () =>
+      usageService.finish({ jobId, status: 'completed', outputCount: 1 }).catch(error => {
+        console.error('ICA usage completion warning:', error?.code || error?.message || error);
+      })
+    );
+
+    const member = await timer.stage('usageService.getSummary', () =>
+      usageService.getSummary(req.auth.user).catch(() => ({
+        displayName: req.auth.user.user_metadata?.display_name || 'ICA Member',
+        monthlyVideoAllowance: null,
+        videosUsed: null,
+        videosRemaining: claim.videosRemaining,
+        periodStart: null,
+        isActive: true,
+        unlimited: Boolean(claim.unlimited)
+      }))
+    );
+
+    console.log(`[ICA][job=${jobId}] TOTAL JOB DURATION | totalMs=${timer.totalElapsedMs()}`);
 
     return {
       ok: true,
@@ -237,6 +296,7 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
       director: { punchIns: directorPlan.summary.punchIns }
     };
   } catch (error) {
+    console.error(`[ICA][job=${jobId}] JOB FAILED | totalMs=${timer.totalElapsedMs()} | error=${error?.message || error}`);
     if (allowanceClaimed) {
       await usageService.finish({
         jobId,
