@@ -56,6 +56,53 @@ let processingStarted=false;
 let authEnabled=false;
 let memberState=null;
 
+async function produceVideoStream(formData){
+  const response=await fetch('/api/caption-video',{method:'POST',credentials:'same-origin',body:formData});
+  if(!response.ok){
+    const data=await response.json().catch(()=>({}));
+    const error=new Error(data.error||'ICA could not complete that request.');
+    error.status=response.status;
+    error.code=data.code;
+    throw error;
+  }
+
+  const reader=response.body.getReader();
+  const decoder=new TextDecoder();
+  let buffer='';
+
+  while(true){
+    const {done,value}=await reader.read();
+    if(done)break;
+    buffer+=decoder.decode(value,{stream:true});
+
+    let boundary;
+    while((boundary=buffer.indexOf('\n\n'))!==-1){
+      const frame=buffer.slice(0,boundary);
+      buffer=buffer.slice(boundary+2);
+      const eventMatch=frame.match(/^event: (.+)$/m);
+      const dataMatch=frame.match(/^data: (.+)$/m);
+      if(!dataMatch)continue;
+      const payload=JSON.parse(dataMatch[1]);
+      const eventType=eventMatch?.[1]||'message';
+
+      if(eventType==='result')return payload;
+      if(eventType==='error'){
+        const error=new Error(payload.error||'ICA could not prepare this video.');
+        error.status=payload.status;
+        error.code=payload.code;
+        error.videosRemaining=payload.videosRemaining;
+        throw error;
+      }
+      // heartbeat events are ignored — they exist only to keep the connection alive
+    }
+  }
+
+  // Stream ended without ever sending a 'result' or 'error' event — the
+  // connection was lost or the server exited mid-render. Don't silently
+  // return undefined; surface it as an explicit failure.
+  throw new Error('ICA lost connection while producing this video. Please try again.');
+}
+
 async function api(url,options={}){
   const response=await fetch(url,{credentials:'same-origin',...options,headers:{...(options.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(options.headers||{})}});
   const data=await response.json().catch(()=>({}));
@@ -123,7 +170,7 @@ async function produceVideo(){
   processingState.classList.add('visible');processBtn.disabled=true;message('ICA is producing your video. Keep this page open.');
   try{
     const formData=new FormData();formData.append('video',currentFile,currentFile.name);formData.append('communicationGoal',selectedCommunicationGoal);
-    const data=await api('/api/caption-video',{method:'POST',body:formData});
+    const data=await produceVideoStream(formData);
     previewUrl=data.outputUrl;currentJobId=data.jobId;noCaptionUrl=null;previewVideo.src=previewUrl;previewVideo.load();placeholderFrame.style.display='none';videoPreviewWrap.classList.add('visible');processingState.classList.remove('visible');resultPanel.classList.add('visible');firstActions.style.display='grid';downloadNoCaptionsBtn.hidden=!data.noCaptionAvailable;downloadNoCaptionsBtn.disabled=false;downloadNoCaptionsBtn.textContent='Prepare Without Captions';
     const outcomeNames={educational:'Teach',sales:'Sell',story:'Story',motivation:'Inspire'};const outcomeName=outcomeNames[data.producer?.goal]||'chosen';resultEyebrow.textContent='Your video is ready';resultTitle.textContent='Preview your finished ICA production.';resultCopy.textContent=`ICA used the ${outcomeName} strategy to strengthen clarity, pacing, captions and purposeful visual motion.`;message('Your finished video is ready.','success');if(data.usage)updateMember(data.usage);
   }catch(error){processingState.classList.remove('visible');emptyState.style.display='block';message(error.message||'ICA could not prepare this video.','error');if(error.status===401)showLogin();if(error.code==='VIDEO_ALLOWANCE_EXHAUSTED')await refreshMember();}

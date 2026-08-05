@@ -6,6 +6,7 @@ import express from 'express';
 import multer from 'multer';
 
 import { createStageTimer } from '../utils/stageTimer.js';
+import { safeErrorMessage, statusForError } from '../utils/errors.js';
 import { detectSilence } from '../processor/detectSilence.js';
 import { probeVideo } from '../processor/probeVideo.js';
 import { buildPausePlan } from '../processor/buildPausePlan.js';
@@ -46,7 +47,7 @@ export function createCaptionRouter({
     }
   });
 
-  router.post('/caption-video', requireUser, upload.single('video'), async (req, res, next) => {
+  router.post('/caption-video', requireUser, upload.single('video'), async (req, res) => {
     const inputPath = req.file?.path;
     const uploadReceivedAt = Date.now();
 
@@ -56,7 +57,38 @@ export function createCaptionRouter({
       `[ICA] upload received | file=${req.file.originalname} | bytes=${req.file.size} | mimetype=${req.file.mimetype}`
     );
 
+    // Stream the response as SSE so the connection keeps transferring data
+    // for the full duration of the render (some hosts close idle HTTP
+    // connections after a fixed window if no bytes are sent). The business
+    // logic in produceVideo() below is completely unchanged — only the
+    // transport used to deliver its result/error is different.
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    res.flushHeaders();
+
+    // Response-side disconnect signal, not the request object: req can
+    // legitimately emit 'close' once the upload finishes even though the
+    // client is still waiting on the response, which would mark us
+    // "disconnected" while the render is still in progress.
+    let closed = false;
+    res.on('close', () => {
+      if (!res.writableEnded) closed = true;
+    });
+
+    const send = (event, payload) => {
+      if (closed) return;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    let heartbeat;
+
     try {
+      heartbeat = setInterval(() => send('heartbeat', { at: Date.now() }), 20_000);
+
       const result = await jobQueue.run(() => produceVideo({
         req,
         inputPath,
@@ -68,11 +100,25 @@ export function createCaptionRouter({
         outputRegistry,
         uploadReceivedAt
       }));
-      res.json(result);
+
+      send('result', result);
     } catch (error) {
-      next(error);
+      // Same logging + same error shape the generic Express error handler
+      // used to produce via next(error). The one unavoidable difference:
+      // the transport-level HTTP status is always 200 once streaming has
+      // started, so the real status now travels inside the payload and the
+      // frontend reads error.status from there instead of response.status.
+      console.error('ICA server error:', error?.code || error?.message || error);
+      send('error', {
+        error: safeErrorMessage(error),
+        code: error?.code || 'ICA_PRODUCTION_ERROR',
+        status: statusForError(error),
+        ...(Number.isFinite(error?.videosRemaining) ? { videosRemaining: error.videosRemaining } : {})
+      });
     } finally {
+      clearInterval(heartbeat);
       await fsp.rm(inputPath, { force: true }).catch(() => {});
+      if (!closed) res.end();
     }
   });
 
