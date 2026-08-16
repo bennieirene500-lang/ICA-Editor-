@@ -11,7 +11,8 @@ export function renderProductionVideo({
   visualOverlays = [],
   width,
   height,
-  withMusic = true
+  withMusic = true,
+  reframe = null
 }) {
   const disciplinedCues = Array.isArray(soundCues) ? soundCues.slice(0, 3) : [];
 
@@ -23,7 +24,8 @@ export function renderProductionVideo({
     visualOverlays,
     width,
     height,
-    withMusic
+    withMusic,
+    reframe
   });
 
   return new Promise((resolve, reject) => {
@@ -60,7 +62,8 @@ function buildArgs({
   visualOverlays,
   width,
   height,
-  withMusic
+  withMusic,
+  reframe
 }) {
   const outputWidth = even(width);
   const outputHeight = even(height);
@@ -81,7 +84,14 @@ function buildArgs({
 
   const filterParts = [];
 
-  filterParts.push('[0:v]eq=contrast=1.06:saturation=1.12:brightness=0.01[graded]');
+  if (reframe) {
+    filterParts.push(
+      `[0:v]crop=w=${reframe.cropWidth}:h=${reframe.cropHeight}:x='${reframe.xExpr}':y='${reframe.yExpr}',` +
+      `scale=w=${outputWidth}:h=${outputHeight},setsar=1,eq=contrast=1.06:saturation=1.12:brightness=0.01[graded]`
+    );
+  } else {
+    filterParts.push('[0:v]eq=contrast=1.06:saturation=1.12:brightness=0.01[graded]');
+  }
   let currentVideoLabel = 'graded';
 
   visualOverlays.forEach((overlay, index) => {

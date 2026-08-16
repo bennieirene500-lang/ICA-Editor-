@@ -18,6 +18,7 @@ import { detectFillerSpans } from '../processor/detectFillerWords.js';
 import { detectRestartedTakeSpans } from '../processor/detectRestartedTakes.js';
 import { buildDirectorPlan } from '../processor/buildDirectorPlan.js';
 import { renderDirectorVideo } from '../processor/renderDirectorVideo.js';
+import { detectFaceTrack, buildReframePlan } from '../processor/buildReframePlan.js';
 import { buildCaptionGroups } from '../processor/buildCaptions.js';
 import { createProducerDecision } from '../producer/producerBrain.js';
 import { analyzeMoments } from '../producer/analyzeMoments.js';
@@ -38,7 +39,10 @@ export function createCaptionRouter({
   requireUser,
   usageService,
   jobQueue,
-  outputRegistry
+  outputRegistry,
+  visionPythonPath,
+  faceTrackScriptPath,
+  faceTrackReady
 }) {
   const router = express.Router();
   const upload = multer({
@@ -104,7 +108,10 @@ export function createCaptionRouter({
         ffmpegPath,
         usageService,
         outputRegistry,
-        uploadReceivedAt
+        uploadReceivedAt,
+        visionPythonPath,
+        faceTrackScriptPath,
+        faceTrackReady
       }));
 
       send('result', result);
@@ -131,7 +138,7 @@ export function createCaptionRouter({
   return router;
 }
 
-async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, usageService, outputRegistry, uploadReceivedAt }) {
+async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, usageService, outputRegistry, uploadReceivedAt, visionPythonPath, faceTrackScriptPath, faceTrackReady }) {
   const communicationGoal = String(req.body?.communicationGoal || '').trim().toLowerCase();
   if (!communicationGoal) {
     const error = new Error('Tell ICA what you want this video to achieve.');
@@ -318,14 +325,33 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
       })
     );
 
-    const moments = await timer.stage('analyzeMoments (OpenAI, real understanding)', () =>
-      analyzeMoments({
-        apiKey,
-        words: finalWords,
-        goal: communicationGoal,
-        duration: finalMetadata.duration
+    const [moments, reframePlan] = await Promise.all([
+      timer.stage('analyzeMoments (OpenAI, real understanding)', () =>
+        analyzeMoments({
+          apiKey,
+          words: finalWords,
+          goal: communicationGoal,
+          duration: finalMetadata.duration
+        })
+      ),
+      timer.stage('detectFaceTrack + buildReframePlan (auto-reframe)', async () => {
+        if (!faceTrackReady) return null;
+        try {
+          const detection = await detectFaceTrack({
+            pythonPath: visionPythonPath,
+            scriptPath: faceTrackScriptPath,
+            videoPath: directedPath
+          });
+          return buildReframePlan({
+            sourceWidth: detection.sourceWidth,
+            sourceHeight: detection.sourceHeight,
+            track: detection.track
+          });
+        } catch {
+          return null;
+        }
       })
-    );
+    ]);
 
     const palette = pickPalette(jobId);
 
@@ -415,7 +441,8 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
         soundCues,
         visualOverlays: visualPlan,
         width: finalMetadata.width,
-        height: finalMetadata.height
+        height: finalMetadata.height,
+        reframe: reframePlan
       })
     );
 

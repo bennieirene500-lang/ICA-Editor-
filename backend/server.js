@@ -34,6 +34,9 @@ const outputsDir = path.join(runtimeRoot, 'outputs');
 await Promise.all([uploadsDir, tempDir, outputsDir].map(dir => fsp.mkdir(dir, { recursive: true })));
 
 const ffmpegReady = spawnSync(config.ffmpegPath, ['-version'], { stdio: 'ignore' }).status === 0;
+const visionPythonPath = process.env.FACE_TRACK_PYTHON || path.join(projectDir, '.venv-vision', 'bin', 'python3');
+const faceTrackScriptPath = path.join(backendDir, 'vision', 'detectFaceTrack.py');
+const faceTrackReady = spawnSync(visionPythonPath, ['-c', 'import cv2'], { stdio: 'ignore' }).status === 0;
 const gateway = new SupabaseGateway(config.supabase);
 const sessionManager = createSessionManager({
   gateway,
@@ -105,7 +108,10 @@ app.use('/api', createCaptionRouter({
   requireUser: sessionManager.requireUser,
   usageService,
   jobQueue,
-  outputRegistry
+  outputRegistry,
+  visionPythonPath,
+  faceTrackScriptPath,
+  faceTrackReady
 }));
 app.use('/api', createMediaRouter({
   requireUser: sessionManager.requireUser,
@@ -140,6 +146,7 @@ const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`Authentication: ${sessionManager.authEnabled ? 'Supabase required' : 'founder preview'}`);
   console.log(`OpenAI configured: ${config.openAiConfigured ? 'Yes' : 'No'}`);
   console.log(`FFmpeg ready: ${ffmpegReady ? 'Yes' : 'No'}`);
+  console.log(`Face tracking ready: ${faceTrackReady ? 'Yes' : 'No (auto-reframe will be skipped)'}`);
   console.log(`Temporary outputs expire after: ${Math.round(config.outputTtlMs / 60000)} minutes`);
   console.log('');
 });
