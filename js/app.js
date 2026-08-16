@@ -196,4 +196,19 @@ detailsToggle.addEventListener('click',()=>{const expanded=detailsToggle.getAttr
 newVideoBtn.addEventListener('click',startNew);downloadBtn.addEventListener('click',()=>download(previewUrl));
 downloadNoCaptionsBtn.addEventListener('click',async()=>{if(!currentJobId)return;downloadNoCaptionsBtn.disabled=true;downloadNoCaptionsBtn.textContent='Preparing…';try{if(!noCaptionUrl){const data=await api(`/api/jobs/${currentJobId}/no-captions`,{method:'POST',body:'{}'});noCaptionUrl=data.url;}download(noCaptionUrl);downloadNoCaptionsBtn.textContent='Download Without Captions';}catch(error){message(error.message,'error');downloadNoCaptionsBtn.textContent='Prepare Without Captions';}finally{downloadNoCaptionsBtn.disabled=false;}});
 
+const menuBtn=document.getElementById('menuBtn');
+const sidebar=document.getElementById('sidebar');
+const sidebarClose=document.getElementById('sidebarClose');
+const sidebarBackdrop=document.getElementById('sidebarBackdrop');
+if(menuBtn&&sidebar&&sidebarBackdrop){
+  const openMenu=()=>{sidebar.classList.add('open');sidebarBackdrop.classList.add('visible');};
+  const closeMenu=()=>{sidebar.classList.remove('open');sidebarBackdrop.classList.remove('visible');};
+  menuBtn.addEventListener('click',openMenu);
+  sidebarClose?.addEventListener('click',closeMenu);
+  sidebarBackdrop.addEventListener('click',closeMenu);
+  sidebar.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('click',closeMenu));
+}
+
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js').catch(()=>{});});}
+
 void bootstrap();

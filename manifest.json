@@ -1,0 +1,15 @@
+{
+  "name": "ICA AI Video Editor",
+  "short_name": "ICA Editor",
+  "description": "Turn a raw talking-head recording into a captioned, production-ready social video.",
+  "start_url": "/editor.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07101d",
+  "theme_color": "#08111f",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

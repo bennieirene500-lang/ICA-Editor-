@@ -2,9 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#08111f" />
   <title>ICA AI Video Editor</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ICA Editor" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -27,7 +33,9 @@
   </div>
 </div>
 <div class="app-shell" id="appShell">
-  <aside class="sidebar">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <button class="sidebar-close" id="sidebarClose" type="button" aria-label="Close menu">×</button>
     <a class="brand" href="index.html"><div class="brand-mark">ICA</div><div class="brand-copy"><strong>Ideal Client Alliance</strong><span>AI Video Editor</span></div></a>
     <a class="nav-item active" href="#editor"><span class="nav-icon">✦</span><span>Editor</span></a>
     <a class="nav-item" href="#result"><span class="nav-icon">▶</span><span>Production</span></a>
@@ -36,6 +44,7 @@
 
   <main>
     <div class="topbar">
+      <button class="menu-btn" id="menuBtn" type="button" aria-label="Open menu"><span></span><span></span><span></span></button>
       <div class="status-pill"><span class="status-dot"></span> Editor ready</div>
       <div class="topbar-account"><div class="usage-pill" id="usagePill">Checking allowance…</div><div class="member-chip"><span id="memberWelcome">Welcome back</span><div class="avatar" id="memberAvatar">I</div></div><button class="logout-btn" id="logoutBtn" type="button">Sign out</button></div>
     </div>
