@@ -3,7 +3,8 @@ export function buildPausePlan({
   videoDuration,
   preserveSeconds = 0.28,
   minimumRemovalSeconds = 0.42,
-  maximumSingleRemovalSeconds = 2.5
+  maximumSingleRemovalSeconds = 2.5,
+  extraRemovals = []
 }) {
   const removals = [];
 
@@ -25,6 +26,15 @@ export function buildPausePlan({
       duration: round(cappedEnd - removableStart)
     });
   }
+
+  for (const span of extraRemovals) {
+    const start = round(Math.max(0, Number(span.start) || 0));
+    const end = round(Number(span.end) || 0);
+    if (end - start < 0.05) continue;
+    removals.push({ start, end, duration: round(end - start) });
+  }
+
+  removals.sort((a, b) => a.start - b.start);
 
   const keepSegments = invertRanges(removals, videoDuration);
 

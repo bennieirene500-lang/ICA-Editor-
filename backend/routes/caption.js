@@ -14,11 +14,17 @@ import { removePauses } from '../processor/removePauses.js';
 import { extractAudio } from '../processor/extractAudio.js';
 import { transcribeAudio } from '../processor/transcribeAudio.js';
 import { analyseMeaning } from '../processor/analyseMeaning.js';
+import { detectFillerSpans } from '../processor/detectFillerWords.js';
+import { detectRestartedTakeSpans } from '../processor/detectRestartedTakes.js';
 import { buildDirectorPlan } from '../processor/buildDirectorPlan.js';
 import { renderDirectorVideo } from '../processor/renderDirectorVideo.js';
 import { buildCaptionGroups } from '../processor/buildCaptions.js';
 import { createProducerDecision } from '../producer/producerBrain.js';
+import { analyzeMoments } from '../producer/analyzeMoments.js';
+import { generateVisualImages } from '../visuals/generateVisualImages.js';
+import { fetchStockMedia } from '../visuals/fetchStockMedia.js';
 import { buildVisualPlan } from '../visuals/buildVisualPlan.js';
+import { pickPalette } from '../visuals/paletteLibrary.js';
 import { createProductionAss } from '../visuals/createProductionAss.js';
 import { renderProductionVideo } from '../visuals/renderProductionVideo.js';
 import { buildSoundCues } from '../visuals/motionLibrary.js';
@@ -133,6 +139,10 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
     throw error;
   }
 
+  const roughCutIntensity = ['light', 'balanced', 'tight'].includes(
+    String(req.body?.roughCutIntensity || '').trim().toLowerCase()
+  ) ? req.body.roughCutIntensity.trim().toLowerCase() : 'balanced';
+
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     const error = new Error('The OpenAI connection is not configured yet.');
@@ -148,14 +158,17 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
   }
 
   const tightenedPath = path.join(tempDir, `${jobId}-tightened.mp4`);
+  const cleanedPath = path.join(tempDir, `${jobId}-cleaned.mp4`);
   const directedPath = path.join(tempDir, `${jobId}-directed.mp4`);
   const audioPath = path.join(tempDir, `${jobId}.mp3`);
   const productionAssPath = path.join(tempDir, `${jobId}-production.ass`);
-  const visualOnlyAssPath = path.join(tempDir, `${jobId}-visual-only.ass`);
+  const cardOnlyAssPath = path.join(tempDir, `${jobId}-cards-only.ass`);
   const outputPath = path.join(outputsDir, `${jobId}-produced.mp4`);
 
   let allowanceClaimed = false;
   let preserveOutputArtifacts = false;
+  let generatedImagePaths = [];
+  let cleanedPathCreated = false;
 
   try {
     const originalMetadata = await timer.stage('probeVideo (original)', () =>
@@ -219,23 +232,74 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
       transcribeAudio({ apiKey, audioPath })
     );
 
-    const meaningAnalysis = await timer.stage('analyseMeaning', () =>
+    const firstPassAnalysis = await timer.stage('analyseMeaning', () =>
       analyseMeaning(transcription.words)
     );
 
+    const roughCutExtras = await timer.stage('detect filler words + restarted takes', () => {
+      if (roughCutIntensity === 'light') return [];
+
+      const spans = [...detectFillerSpans(transcription.words)];
+
+      if (roughCutIntensity === 'tight') {
+        spans.push(...detectRestartedTakeSpans(firstPassAnalysis, {
+          maxGapSeconds: 3.5,
+          similarityThreshold: 0.5
+        }));
+      }
+
+      return spans;
+    });
+
+    let finalPath = tightenedPath;
+    let finalMetadata = tightenedMetadata;
+    let finalWords = transcription.words;
+    let meaningAnalysis = firstPassAnalysis;
+
+    if (roughCutExtras.length) {
+      const extraPlan = buildPausePlan({
+        silenceRanges: [],
+        videoDuration: tightenedMetadata.duration,
+        extraRemovals: roughCutExtras
+      });
+
+      if (extraPlan.removals.length) {
+        await timer.stage('removePauses (ffmpeg pass — fillers/restarts)', () =>
+          removePauses({
+            ffmpegPath,
+            inputPath: tightenedPath,
+            outputPath: cleanedPath,
+            keepSegments: extraPlan.keepSegments
+          })
+        );
+        cleanedPathCreated = true;
+
+        finalMetadata = await timer.stage('probeVideo (cleaned)', () =>
+          probeVideo({ ffmpegPath, inputPath: cleanedPath })
+        );
+        finalPath = cleanedPath;
+
+        const remapTime = buildTimeRemapper(extraPlan.removals);
+        finalWords = transcription.words
+          .filter(word => !isInsideAnyRemoval((Number(word.start) + Number(word.end)) / 2, extraPlan.removals))
+          .map(word => ({
+            word: word.word,
+            start: remapTime(Number(word.start)),
+            end: remapTime(Number(word.end))
+          }));
+
+        meaningAnalysis = analyseMeaning(finalWords);
+      }
+    }
+
     const producerDecision = await timer.stage('createProducerDecision', () =>
-      createProducerDecision({
-        goal: communicationGoal,
-        transcript: transcription.text,
-        meaningAnalysis,
-        duration: tightenedMetadata.duration
-      })
+      createProducerDecision({ goal: communicationGoal })
     );
 
     const directorPlan = await timer.stage('buildDirectorPlan', () =>
       buildDirectorPlan({
         analyses: meaningAnalysis,
-        videoDuration: tightenedMetadata.duration,
+        videoDuration: finalMetadata.duration,
         maximumPunchIns: producerDecision.camera.maximumPunchIns,
         minimumSpacingSeconds: producerDecision.camera.minimumSpacingSeconds,
         punchDurationSeconds: producerDecision.camera.punchDurationSeconds,
@@ -246,45 +310,112 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
     await timer.stage('renderDirectorVideo (ffmpeg pass 2/3)', () =>
       renderDirectorVideo({
         ffmpegPath,
-        inputPath: tightenedPath,
+        inputPath: finalPath,
         outputPath: directedPath,
         segments: directorPlan.segments,
-        width: tightenedMetadata.width,
-        height: tightenedMetadata.height
+        width: finalMetadata.width,
+        height: finalMetadata.height
       })
     );
 
-    const captions = await timer.stage('buildCaptionGroups', () =>
-      buildCaptionGroups(transcription.words, producerDecision.captions)
+    const moments = await timer.stage('analyzeMoments (OpenAI, real understanding)', () =>
+      analyzeMoments({
+        apiKey,
+        words: finalWords,
+        goal: communicationGoal,
+        duration: finalMetadata.duration
+      })
     );
-    if (!captions.length) throw new Error('ICA could not detect clear speech in this recording.');
+
+    const palette = pickPalette(jobId);
+
+    const rawTemplateMoments = moments.filter(moment => moment.tier === 'template');
+    const stockMoments = moments.filter(moment => moment.tier === 'stock');
+    const generatedMoments = moments.filter(moment => moment.tier === 'generated');
+
+    const pexelsApiKey = process.env.PEXELS_API_KEY?.trim();
+
+    const indexedTemplateMoments = rawTemplateMoments.map((moment, index) => ({ ...moment, _templateIndex: index }));
+
+    const [templateBackdrops, fetchedStockMoments, imagedMoments] = await Promise.all([
+      timer.stage('fetchStockMedia (card backdrops, one per card)', () => (
+        pexelsApiKey && indexedTemplateMoments.length
+          ? fetchStockMedia({
+              apiKey: pexelsApiKey,
+              moments: indexedTemplateMoments,
+              tempDir,
+              jobId: `${jobId}-backdrop`,
+              photoOnly: true
+            })
+          : []
+      )),
+      timer.stage('fetchStockMedia (Pexels)', () => (
+        pexelsApiKey && stockMoments.length
+          ? fetchStockMedia({ apiKey: pexelsApiKey, moments: stockMoments, tempDir, jobId })
+          : []
+      )),
+      timer.stage('generateVisualImages (OpenAI image generation)', () => (
+        generatedMoments.length
+          ? generateVisualImages({ apiKey, moments: generatedMoments, tempDir, jobId })
+          : []
+      ))
+    ]);
+
+    const backdropByIndex = new Map(templateBackdrops.map(item => [item._templateIndex, item.mediaPath]));
+
+    const templateMoments = rawTemplateMoments.map((moment, index) => ({
+      ...moment,
+      palette,
+      backdropImagePath: backdropByIndex.get(index) || null,
+      backdropColorSource: palette.backdropColorSource
+    }));
+
+    generatedImagePaths = [
+      ...templateBackdrops.map(item => item.mediaPath),
+      ...fetchedStockMoments.map(moment => moment.mediaPath),
+      ...imagedMoments.map(moment => moment.imagePath)
+    ];
 
     const visualPlan = await timer.stage('buildVisualPlan', () =>
       buildVisualPlan({
-        producerDecision,
-        meaningAnalysis,
-        transcript: transcription.text,
-        duration: tightenedMetadata.duration,
-        cameraDecisions: directorPlan.decisions
+        moments: [...templateMoments, ...fetchedStockMoments, ...imagedMoments],
+        duration: finalMetadata.duration,
+        goal: communicationGoal
       })
     );
 
+    const cardVisuals = visualPlan.filter(visual => visual.kind === 'color');
+
+    const captions = await timer.stage('buildCaptionGroups (captions clear during cutaways)', () => {
+      const captionWords = finalWords.filter(word => (
+        !visualPlan.some(visual => {
+          const midpoint = (Number(word.start) + Number(word.end)) / 2;
+          return midpoint >= visual.start && midpoint < visual.end;
+        })
+      ));
+      return buildCaptionGroups(captionWords, producerDecision.captions);
+    });
+    if (!captions.length) throw new Error('ICA could not detect clear speech in this recording.');
+
     const soundCues = await timer.stage('buildSoundCues', () => buildSoundCues(visualPlan));
 
-    await timer.stage('write .ass subtitle files', () =>
+    await timer.stage('write .ass caption+card files', () =>
       Promise.all([
-        fsp.writeFile(productionAssPath, createProductionAss({ captions, visuals: visualPlan, includeCaptions: true }), 'utf8'),
-        fsp.writeFile(visualOnlyAssPath, createProductionAss({ captions, visuals: visualPlan, includeCaptions: false }), 'utf8')
+        fsp.writeFile(productionAssPath, createProductionAss({ captions, cards: cardVisuals }), 'utf8'),
+        fsp.writeFile(cardOnlyAssPath, createProductionAss({ captions: [], cards: cardVisuals }), 'utf8')
       ])
     );
 
-    await timer.stage('renderProductionVideo (ffmpeg pass 3/3, subtitles+sound)', () =>
+    await timer.stage('renderProductionVideo (ffmpeg pass 3/3, cutaways+captions+sound)', () =>
       renderProductionVideo({
         ffmpegPath,
         inputPath: directedPath,
         subtitlePath: productionAssPath,
         outputPath,
-        soundCues
+        soundCues,
+        visualOverlays: visualPlan,
+        width: finalMetadata.width,
+        height: finalMetadata.height
       })
     );
 
@@ -295,7 +426,10 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
         userId: req.auth.user.id,
         captionedPath: outputPath,
         directedPath,
-        visualOnlyAssPath,
+        cardOnlyAssPath,
+        visualOverlays: visualPlan,
+        width: finalMetadata.width,
+        height: finalMetadata.height,
         soundCues,
         safeBaseName
       })
@@ -330,7 +464,6 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
       detectedLanguage: transcription.language,
       captionCount: captions.length,
       visualCount: visualPlan.length,
-      motionCount: visualPlan.filter(item => item.motion).length,
       soundCueCount: soundCues.length,
       usage: member,
       pauseRemoval: { secondsRemoved: pausePlan.totalRemovedSeconds },
@@ -356,12 +489,29 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
   } finally {
     await Promise.allSettled([
       fsp.rm(tightenedPath, { force: true }),
+      cleanedPathCreated ? fsp.rm(cleanedPath, { force: true }) : Promise.resolve(),
       fsp.rm(audioPath, { force: true }),
       fsp.rm(productionAssPath, { force: true }),
       preserveOutputArtifacts ? Promise.resolve() : fsp.rm(directedPath, { force: true }),
-      preserveOutputArtifacts ? Promise.resolve() : fsp.rm(visualOnlyAssPath, { force: true })
+      preserveOutputArtifacts ? Promise.resolve() : fsp.rm(cardOnlyAssPath, { force: true }),
+      ...(preserveOutputArtifacts ? [] : generatedImagePaths.map(imagePath => fsp.rm(imagePath, { force: true })))
     ]);
   }
+}
+
+function buildTimeRemapper(removals) {
+  const sorted = [...removals].sort((a, b) => a.start - b.start);
+  return (time) => {
+    let shift = 0;
+    for (const removal of sorted) {
+      if (removal.end <= time) shift += (removal.end - removal.start);
+    }
+    return Math.max(0, time - shift);
+  };
+}
+
+function isInsideAnyRemoval(time, removals) {
+  return removals.some(removal => time >= removal.start && time < removal.end);
 }
 
 function sanitizeBaseName(filename) {

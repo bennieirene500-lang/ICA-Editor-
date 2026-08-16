@@ -58,13 +58,11 @@ const MOTION_PROFILES = Object.freeze({
 });
 
 const RENDERER_MOTIONS = Object.freeze({
-  card: ['lift', 'slideLeft', 'focus'],
+  concept: ['lift', 'slideLeft', 'focus'],
   quote: ['focus', 'lift'],
   stat: ['settle', 'lift'],
-  graph: ['draw', 'lift'],
   comparison: ['slideLeft', 'slideRight'],
-  process: ['stagger', 'lift'],
-  cta: ['settle', 'lift']
+  process: ['stagger', 'lift']
 });
 
 export function resolveMotionProfile({
@@ -78,7 +76,7 @@ export function resolveMotionProfile({
 
   if (confidence < 0.63) name = 'focus';
   if (goal === 'story' && renderer !== 'comparison') name = 'focus';
-  if (goal === 'motivation' && renderer === 'card') name = 'lift';
+  if (goal === 'motivation' && renderer === 'concept') name = 'lift';
 
   return structuredClone(MOTION_PROFILES[name] || MOTION_PROFILES.lift);
 }
@@ -114,6 +112,7 @@ function soundForRenderer(renderer) {
     stat: 'soft-tick',
     graph: 'soft-whoosh',
     process: 'soft-whoosh',
-    cta: 'soft-rise'
+    cta: 'soft-rise',
+    cutaway: 'soft-whoosh'
   }[renderer] || 'none';
 }

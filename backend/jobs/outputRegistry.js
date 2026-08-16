@@ -51,7 +51,8 @@ export class OutputRegistry {
       entry.captionedPath,
       entry.noCaptionPath,
       entry.directedPath,
-      entry.visualOnlyAssPath
+      entry.cardOnlyAssPath,
+      ...(entry.visualOverlays || []).flatMap(overlay => [overlay.imagePath, overlay.mediaPath])
     ].filter(Boolean));
     await Promise.allSettled([...paths].map(filePath => fsp.rm(filePath, { force: true })));
   }

@@ -13,8 +13,8 @@
     "maxChars": 30
   },
   "camera": {
-    "maximumPunchIns": 5,
-    "minimumSpacingSeconds": 5.2,
+    "maximumPunchIns": 7,
+    "minimumSpacingSeconds": 3.6,
     "punchDurationSeconds": 1.5,
     "zoomScale": 1.1
   },

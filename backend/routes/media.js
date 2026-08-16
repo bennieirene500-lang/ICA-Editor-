@@ -50,9 +50,12 @@ export function createMediaRouter({ requireUser, outputRegistry, jobQueue, outpu
             await renderProductionVideo({
               ffmpegPath,
               inputPath: entry.directedPath,
-              subtitlePath: entry.visualOnlyAssPath,
+              subtitlePath: entry.cardOnlyAssPath,
               outputPath: noCaptionPath,
-              soundCues: entry.soundCues
+              soundCues: entry.soundCues,
+              visualOverlays: entry.visualOverlays,
+              width: entry.width,
+              height: entry.height
             });
             outputRegistry.setNoCaptionPath(entry.jobId, noCaptionPath);
             return noCaptionPath;
