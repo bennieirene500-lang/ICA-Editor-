@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#08111f" />
+  <title>ICA AI Video Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="auth-loading">
+<div class="auth-gate" id="authGate" hidden>
+  <div class="auth-card">
+    <div class="brand auth-brand"><div class="brand-mark">ICA</div><div class="brand-copy"><strong>Ideal Client Alliance</strong><span>Private Beta</span></div></div>
+    <div class="eyebrow">Member access</div>
+    <h1>Sign in to produce your video.</h1>
+    <p>Your ICA beta account controls your private access and monthly video allowance.</p>
+    <form id="loginForm" class="auth-form">
+      <label>Email address<input id="loginEmail" type="email" autocomplete="email" required></label>
+      <label>Password<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+      <button class="primary-btn" id="loginBtn" type="submit">Sign In</button>
+      <div class="auth-message" id="authMessage" role="status" aria-live="polite"></div>
+    </form>
+    <small>Beta accounts are created privately by ICA.</small>
+  </div>
+</div>
+<div class="app-shell" id="appShell">
+  <aside class="sidebar">
+    <a class="brand" href="index.html"><div class="brand-mark">ICA</div><div class="brand-copy"><strong>Ideal Client Alliance</strong><span>AI Video Editor</span></div></a>
+    <a class="nav-item active" href="#editor"><span class="nav-icon">✦</span><span>Editor</span></a>
+    <a class="nav-item" href="#result"><span class="nav-icon">▶</span><span>Production</span></a>
+    <div class="sidebar-bottom"><div class="eyebrow">ICA Member Access</div><p>Your tools work together as one simple ICA content journey.</p></div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <div class="status-pill"><span class="status-dot"></span> Editor ready</div>
+      <div class="topbar-account"><div class="usage-pill" id="usagePill">Checking allowance…</div><div class="member-chip"><span id="memberWelcome">Welcome back</span><div class="avatar" id="memberAvatar">I</div></div><button class="logout-btn" id="logoutBtn" type="button">Sign out</button></div>
+    </div>
+
+    <div class="editor-head">
+      <div class="eyebrow">ICA AI Video Editor</div>
+      <h1>Record it. Upload it. Let ICA finish it.</h1>
+    </div>
+
+    <section class="workspace" id="editor">
+      <div class="panel upload-panel">
+        <label class="upload-zone" id="dropZone" for="videoInput">
+          <div><div class="upload-icon">↑</div><h3>Drop your talking-head video here</h3><p>or <strong>click to upload</strong></p><input id="videoInput" type="file" accept="video/*"></div>
+        </label>
+
+        <div class="file-card" id="fileCard"><div class="file-thumb">▶</div><div><div class="file-name" id="fileName">video.mp4</div><div class="file-meta" id="fileMeta">Video selected</div></div><button class="remove-file" id="removeFile" aria-label="Remove video">×</button></div>
+        <div class="upload-message" id="uploadMessage" role="status" aria-live="polite"></div>
+
+        <div class="video-ready-card" id="metadataCard">
+          <div class="ready-line">
+            <span class="ready-check">✓</span>
+            <div>
+              <strong>Video ready</strong>
+              <span id="readySummary">Ready to continue</span>
+            </div>
+          </div>
+          <button class="details-toggle" id="detailsToggle" type="button" aria-expanded="false">View details</button>
+          <div class="metadata-grid" id="metadataDetails" hidden>
+            <div><span>Duration</span><strong id="metaDuration">—</strong></div>
+            <div><span>Size</span><strong id="metaSize">—</strong></div>
+            <div><span>Format</span><strong id="metaFormat">—</strong></div>
+            <div><span>Resolution</span><strong id="metaResolution">—</strong></div>
+          </div>
+        </div>
+
+        <div class="toggle-list">
+          <label class="toggle-row"><span><strong>Background music</strong><small>A subtle underscore mixed beneath your voice.</small></span><input type="checkbox" id="toggleMusic" checked><span class="toggle-switch"></span></label>
+          <label class="toggle-row"><span><strong>Auto camera framing</strong><small>Gently keeps you centred in frame as you move.</small></span><input type="checkbox" id="toggleReframe" checked><span class="toggle-switch"></span></label>
+          <label class="toggle-row"><span><strong>Tighter pacing</strong><small>Also trims filler words and restarted sentences.</small></span><input type="checkbox" id="toggleTight"><span class="toggle-switch"></span></label>
+        </div>
+
+        <div class="action-wrap produce-action">
+          <button class="primary-btn" id="processBtn" disabled>Let ICA Produce My Video</button>
+          <div class="produce-help">Add your video first. ICA will guide the next step.</div>
+        </div>
+      </div>
+
+      <div class="panel preview-panel" id="result">
+        <div class="preview-body-single">
+          <div class="phone-frame" id="placeholderFrame"><div class="phone-notch"></div><div class="video-canvas"><div class="silhouette"></div><div class="caption-demo">Stop manually editing <span>every pause.</span></div></div></div>
+          <div class="video-preview-wrap" id="videoPreviewWrap">
+            <div class="phone-frame phone-frame-live"><div class="phone-notch"></div><video class="preview-video" id="previewVideo" controls playsinline></video></div>
+          </div>
+
+          <div class="empty-state" id="emptyState"><div class="eyebrow">Ready when you are</div><h3>Your raw video goes in. A polished social video comes out.</h3><p>Select a video and ICA will prepare the edit.</p>
+            <div class="timeline"><div class="timeline-item"><div class="timeline-dot">1</div><span>Select your video</span></div><div class="timeline-item"><div class="timeline-dot">2</div><span>ICA prepares the edit</span></div><div class="timeline-item"><div class="timeline-dot">3</div><span>Preview and download</span></div></div>
+          </div>
+
+          <div class="processing-state" id="processingState">
+            <div class="processing-ring"></div>
+            <div class="eyebrow">Preparing your video</div>
+            <h3 id="processingTitle">ICA is creating your first edit.</h3>
+            <p style="color:var(--muted);font-size:13px;line-height:1.55">ICA is shaping the pacing, captions, camera direction and supporting visuals.</p>
+          </div>
+          <div class="result-panel" id="resultPanel">
+            <div class="eyebrow" id="resultEyebrow">Your video is ready</div>
+            <h3 id="resultTitle">Preview your finished video.</h3>
+            <p id="resultCopy" style="color:var(--muted);font-size:13px;line-height:1.55">ICA has completed the production. Watch it once, then download the version you need.</p>
+
+            <div class="preview-actions" id="firstActions">
+              <button class="primary-btn" id="downloadBtn">Download Video</button>
+              <button class="secondary-btn" id="downloadNoCaptionsBtn">Prepare Without Captions</button>
+              <button class="ghost-btn" id="newVideoBtn">Start With a New Video</button>
+            </div>
+            <div class="caption-choice-note">ICA prepares the caption-free version only when requested. It uses no additional AI transcription.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <div class="footer-note">ICA AI Video Editor</div>
+  </main>
+</div>
+
+<div class="goal-modal" id="goalModal" hidden>
+  <div class="goal-modal-backdrop" data-close-goal-modal></div>
+  <div class="goal-modal-card" role="dialog" aria-modal="true" aria-labelledby="goalModalTitle">
+    <button class="goal-modal-close" id="goalModalClose" type="button" aria-label="Close">×</button>
+    <div class="eyebrow">Before ICA produces your video</div>
+    <h2 id="goalModalTitle">What do you want this video to do?</h2>
+    <p>Choose the outcome. ICA handles all production decisions.</p>
+
+    <div class="goal-modal-options">
+      <button class="goal-choice" type="button" data-goal="educational">
+        <span class="goal-icon">🎓</span>
+        <span><strong>Teach something</strong><small>Make an idea clear and easy to remember</small></span>
+      </button>
+      <button class="goal-choice" type="button" data-goal="sales">
+        <span class="goal-icon">💼</span>
+        <span><strong>Sell something</strong><small>Show value and guide the viewer to act</small></span>
+      </button>
+      <button class="goal-choice" type="button" data-goal="story">
+        <span class="goal-icon">📖</span>
+        <span><strong>Tell a story</strong><small>Build emotion, curiosity, and connection</small></span>
+      </button>
+      <button class="goal-choice" type="button" data-goal="motivation">
+        <span class="goal-icon">✨</span>
+        <span><strong>Inspire people</strong><small>Build confidence, energy, and momentum</small></span>
+      </button>
+    </div>
+
+    <div class="goal-modal-auto">
+      <span>Every video automatically gets</span>
+      <div class="goal-modal-auto-tags">
+        <span class="mini-badge">Dead spaces removed</span>
+        <span class="mini-badge">Captions created</span>
+        <span class="mini-badge">Pacing improved</span>
+        <span class="mini-badge">Visual support added</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

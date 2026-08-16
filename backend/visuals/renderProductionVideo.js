@@ -139,7 +139,7 @@ function buildArgs({
 
   let audioOutputLabel = '0:a';
 
-  if (withMusic || soundCues.length) {
+  {
     filterParts.push(
       '[0:a]aformat=sample_rates=48000:channel_layouts=stereo,' +
       'highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11[voiceRaw]'

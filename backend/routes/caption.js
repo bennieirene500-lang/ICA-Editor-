@@ -153,6 +153,9 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
     String(req.body?.roughCutIntensity || '').trim().toLowerCase()
   ) ? req.body.roughCutIntensity.trim().toLowerCase() : 'balanced';
 
+  const includeMusic = String(req.body?.includeMusic ?? 'true').trim().toLowerCase() !== 'false';
+  const includeReframe = String(req.body?.includeReframe ?? 'true').trim().toLowerCase() !== 'false';
+
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     const error = new Error('The OpenAI connection is not configured yet.');
@@ -347,7 +350,7 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
         })
       ),
       timer.stage('detectFaceTrack + buildReframePlan (auto-reframe)', async () => {
-        if (!faceTrackReady) return null;
+        if (!faceTrackReady || !includeReframe) return null;
         try {
           const detection = await detectFaceTrack({
             pythonPath: visionPythonPath,
@@ -456,7 +459,8 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
         visualOverlays: visualPlan,
         width: finalMetadata.width,
         height: finalMetadata.height,
-        reframe: reframePlan
+        reframe: reframePlan,
+        withMusic: includeMusic
       })
     );
 

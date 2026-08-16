@@ -28,6 +28,9 @@ const metaResolution=document.getElementById('metaResolution');
 const readySummary=document.getElementById('readySummary');
 const detailsToggle=document.getElementById('detailsToggle');
 const metadataDetails=document.getElementById('metadataDetails');
+const toggleMusic=document.getElementById('toggleMusic');
+const toggleReframe=document.getElementById('toggleReframe');
+const toggleTight=document.getElementById('toggleTight');
 const goalModal=document.getElementById('goalModal');
 const goalModalClose=document.getElementById('goalModalClose');
 const goalChoices=[...document.querySelectorAll('.goal-choice')];
@@ -40,7 +43,6 @@ const loginBtn=document.getElementById('loginBtn');
 const authMessage=document.getElementById('authMessage');
 const logoutBtn=document.getElementById('logoutBtn');
 const usagePill=document.getElementById('usagePill');
-const sidebarUsage=document.getElementById('sidebarUsage');
 const memberWelcome=document.getElementById('memberWelcome');
 const memberAvatar=document.getElementById('memberAvatar');
 
@@ -52,9 +54,10 @@ let currentJobId=null;
 let noCaptionUrl=null;
 let lastFingerprint=null;
 let selectedCommunicationGoal='';
-let processingStarted=false;
+let processingActive=false;
 let authEnabled=false;
 let memberState=null;
+let rawPreviewUrl=null;
 
 async function produceVideoStream(formData){
   const response=await fetch('/api/caption-video',{method:'POST',credentials:'same-origin',body:formData});
@@ -134,11 +137,11 @@ function updateMember(member,user={}){
   const name=member?.displayName||user.displayName||user.email?.split('@')[0]||'ICA Member';
   memberWelcome.textContent=`Welcome back, ${name}`;
   memberAvatar.textContent=name.charAt(0).toUpperCase();
-  if(member?.unlimited){usagePill.textContent='Founder preview';sidebarUsage.textContent='Founder preview';}
-  else{const remaining=Math.max(0,Number(member?.videosRemaining||0));usagePill.textContent=`${remaining} video${remaining===1?'':'s'} left this month`;sidebarUsage.textContent=`${remaining} video${remaining===1?'':'s'} remaining`;}
+  if(member?.unlimited){usagePill.textContent='Founder preview';}
+  else{const remaining=Math.max(0,Number(member?.videosRemaining||0));usagePill.textContent=`${remaining} video${remaining===1?'':'s'} left this month`;}
   applyAllowanceState();
 }
-function applyAllowanceState(){const exhausted=memberState&&!memberState.unlimited&&Number(memberState.videosRemaining)<=0;if(exhausted){processBtn.disabled=true;if(produceHelp)produceHelp.textContent='Your included videos for this month have been used.';}else if(currentFile){processBtn.disabled=false;}}
+function applyAllowanceState(){const exhausted=memberState&&!memberState.unlimited&&Number(memberState.videosRemaining)<=0;if(exhausted){processBtn.disabled=true;if(produceHelp)produceHelp.textContent='Your included videos for this month have been used.';}else if(currentFile){processBtn.disabled=false;if(produceHelp)produceHelp.textContent='Ready. Press the button to continue.';}}
 
 async function bootstrap(){
   try{
@@ -157,27 +160,28 @@ logoutBtn.addEventListener('click',async()=>{await api('/api/auth/logout',{metho
 
 async function refreshMember(){try{const data=await api('/api/member');updateMember(data.member);}catch(error){if(error.status===401)showLogin();}}
 
-async function selectFile(file){const fileError=validateFile(file);if(fileError){message(fileError,'error');return;}const fingerprint=`${file.name}:${file.size}:${file.lastModified}`;if(fingerprint===lastFingerprint&&currentFile){message('This video is already selected.','error');return;}message('Checking your video…');dropZone.classList.add('busy');processBtn.disabled=true;clearMeta();try{const metadata=await readMetadata(file);const metadataError=validateMetadata(metadata);if(metadataError)throw new Error(metadataError);currentFile=file;currentMetadata=metadata;lastFingerprint=fingerprint;fileName.textContent=file.name;fileMeta.textContent='Ready to continue';fileCard.classList.add('visible');metaDuration.textContent=duration(metadata.duration);metaSize.textContent=bytes(metadata.size);metaFormat.textContent=metadata.format;metaResolution.textContent=`${metadata.width} × ${metadata.height}`;metadataCard.classList.add('visible');readySummary.textContent=`${duration(metadata.duration)} · Ready to continue`;message('ICA will optimise this video for the best result.','success');processBtn.disabled=false;emptyState.querySelector('h3').textContent='Your video is ready.';emptyState.querySelector('p').textContent='Press the orange button and ICA will guide the next step.';if(produceHelp)produceHelp.textContent='Ready. Press the button to continue.';applyAllowanceState();}catch(error){currentFile=null;currentMetadata=null;fileCard.classList.remove('visible');processBtn.disabled=true;clearMeta();message(error.message,'error');input.value='';}finally{dropZone.classList.remove('busy');}}
-
+function showRawPreview(file){if(rawPreviewUrl)URL.revokeObjectURL(rawPreviewUrl);rawPreviewUrl=URL.createObjectURL(file);previewVideo.src=rawPreviewUrl;previewVideo.load();placeholderFrame.style.display='none';videoPreviewWrap.classList.add('visible');}
 function openGoalModal(){selectedCommunicationGoal='';goalModal.hidden=false;document.body.classList.add('modal-open');window.setTimeout(()=>goalChoices[0]?.focus(),40);}
-function closeGoalModal(){if(processingStarted)return;goalModal.hidden=true;document.body.classList.remove('modal-open');processBtn.focus();}
+function closeGoalModal(){if(processingActive)return;goalModal.hidden=true;document.body.classList.remove('modal-open');processBtn.focus();}
+
+async function selectFile(file){const fileError=validateFile(file);if(fileError){message(fileError,'error');return;}const fingerprint=`${file.name}:${file.size}:${file.lastModified}`;if(fingerprint===lastFingerprint&&currentFile){message('This video is already selected.','error');return;}message('Checking your video…');dropZone.classList.add('busy');processBtn.disabled=true;clearMeta();try{const metadata=await readMetadata(file);const metadataError=validateMetadata(metadata);if(metadataError)throw new Error(metadataError);currentFile=file;currentMetadata=metadata;lastFingerprint=fingerprint;fileName.textContent=file.name;fileMeta.textContent='Ready to continue';fileCard.classList.add('visible');metaDuration.textContent=duration(metadata.duration);metaSize.textContent=bytes(metadata.size);metaFormat.textContent=metadata.format;metaResolution.textContent=`${metadata.width} × ${metadata.height}`;metadataCard.classList.add('visible');readySummary.textContent=`${duration(metadata.duration)} · Ready to continue`;message('ICA will optimise this video for the best result.','success');emptyState.style.display='none';showRawPreview(file);applyAllowanceState();}catch(error){currentFile=null;currentMetadata=null;fileCard.classList.remove('visible');processBtn.disabled=true;clearMeta();message(error.message,'error');input.value='';}finally{dropZone.classList.remove('busy');}}
 
 async function produceVideo(){
   if(!currentFile||!currentMetadata||!selectedCommunicationGoal)return;
-  emptyState.style.display='none';resultPanel.classList.remove('visible');videoPreviewWrap.classList.remove('visible');placeholderFrame.style.display='block';
+  emptyState.style.display='none';resultPanel.classList.remove('visible');
   const progressMessages=['Understanding your message…','Planning the production…','Shaping the pacing…','Directing the camera movement…','Designing supporting visuals…','Adding purposeful motion…','Creating supporting captions…','Producing your finished video…','Almost finished…'];
   let progressIndex=0;processingTitle.textContent=progressMessages[progressIndex];const progressTimer=window.setInterval(()=>{progressIndex=Math.min(progressIndex+1,progressMessages.length-1);processingTitle.textContent=progressMessages[progressIndex];},5000);
   processingState.classList.add('visible');processBtn.disabled=true;message('ICA is producing your video. Keep this page open.');
   try{
-    const formData=new FormData();formData.append('video',currentFile,currentFile.name);formData.append('communicationGoal',selectedCommunicationGoal);
+    const formData=new FormData();formData.append('video',currentFile,currentFile.name);formData.append('communicationGoal',selectedCommunicationGoal);formData.append('includeMusic',String(toggleMusic.checked));formData.append('includeReframe',String(toggleReframe.checked));formData.append('roughCutIntensity',toggleTight.checked?'tight':'balanced');
     const data=await produceVideoStream(formData);
-    previewUrl=data.outputUrl;currentJobId=data.jobId;noCaptionUrl=null;previewVideo.src=previewUrl;previewVideo.load();placeholderFrame.style.display='none';videoPreviewWrap.classList.add('visible');processingState.classList.remove('visible');resultPanel.classList.add('visible');firstActions.style.display='grid';downloadNoCaptionsBtn.hidden=!data.noCaptionAvailable;downloadNoCaptionsBtn.disabled=false;downloadNoCaptionsBtn.textContent='Prepare Without Captions';
+    previewUrl=data.outputUrl;currentJobId=data.jobId;noCaptionUrl=null;if(rawPreviewUrl){URL.revokeObjectURL(rawPreviewUrl);rawPreviewUrl=null;}previewVideo.src=previewUrl;previewVideo.load();videoPreviewWrap.classList.add('visible');processingState.classList.remove('visible');resultPanel.classList.add('visible');firstActions.style.display='grid';downloadNoCaptionsBtn.hidden=!data.noCaptionAvailable;downloadNoCaptionsBtn.disabled=false;downloadNoCaptionsBtn.textContent='Prepare Without Captions';
     const outcomeNames={educational:'Teach',sales:'Sell',story:'Story',motivation:'Inspire'};const outcomeName=outcomeNames[data.producer?.goal]||'chosen';resultEyebrow.textContent='Your video is ready';resultTitle.textContent='Preview your finished ICA production.';resultCopy.textContent=`ICA used the ${outcomeName} strategy to strengthen clarity, pacing, captions and purposeful visual motion.`;message('Your finished video is ready.','success');if(data.usage)updateMember(data.usage);
   }catch(error){processingState.classList.remove('visible');emptyState.style.display='block';message(error.message||'ICA could not prepare this video.','error');if(error.status===401)showLogin();if(error.code==='VIDEO_ALLOWANCE_EXHAUSTED')await refreshMember();}
   finally{window.clearInterval(progressTimer);processBtn.disabled=false;applyAllowanceState();}
 }
 
-function startNew(){selectedCommunicationGoal='';input.value='';currentFile=null;currentMetadata=null;lastFingerprint=null;previewUrl=null;noCaptionUrl=null;currentJobId=null;fileCard.classList.remove('visible');processBtn.disabled=true;message('');clearMeta();previewVideo.removeAttribute('src');previewVideo.load();emptyState.style.display='block';processingState.classList.remove('visible');resultPanel.classList.remove('visible');videoPreviewWrap.classList.remove('visible');placeholderFrame.style.display='block';if(produceHelp)produceHelp.textContent='Add your video first. ICA will guide the next step.';}
+function startNew(){selectedCommunicationGoal='';input.value='';currentFile=null;currentMetadata=null;lastFingerprint=null;previewUrl=null;noCaptionUrl=null;currentJobId=null;if(rawPreviewUrl){URL.revokeObjectURL(rawPreviewUrl);rawPreviewUrl=null;}fileCard.classList.remove('visible');processBtn.disabled=true;message('');clearMeta();previewVideo.removeAttribute('src');previewVideo.load();emptyState.style.display='block';processingState.classList.remove('visible');resultPanel.classList.remove('visible');videoPreviewWrap.classList.remove('visible');placeholderFrame.style.display='block';if(produceHelp)produceHelp.textContent='Add your video first. ICA will guide the next step.';}
 function download(url){if(!url)return;const link=document.createElement('a');link.href=`${url}${url.includes('?')?'&':'?'}download=1`;document.body.appendChild(link);link.click();link.remove();}
 
 input.addEventListener('change',event=>selectFile(event.target.files[0]));
@@ -186,7 +190,7 @@ input.addEventListener('change',event=>selectFile(event.target.files[0]));
 dropZone.addEventListener('drop',event=>{const file=event.dataTransfer.files[0];if(file)selectFile(file);});
 removeFile.addEventListener('click',event=>{event.preventDefault();startNew();});
 processBtn.addEventListener('click',()=>{if(currentFile&&currentMetadata)openGoalModal();});
-goalChoices.forEach(choice=>choice.addEventListener('click',async()=>{if(processingStarted)return;selectedCommunicationGoal=choice.dataset.goal||'';if(!selectedCommunicationGoal)return;processingStarted=true;goalChoices.forEach(item=>item.disabled=true);goalModalClose.disabled=true;goalModal.hidden=true;document.body.classList.remove('modal-open');try{await produceVideo();}finally{processingStarted=false;goalChoices.forEach(item=>item.disabled=false);goalModalClose.disabled=false;}}));
+goalChoices.forEach(choice=>choice.addEventListener('click',async()=>{if(processingActive)return;selectedCommunicationGoal=choice.dataset.goal||'';if(!selectedCommunicationGoal)return;processingActive=true;goalChoices.forEach(item=>item.disabled=true);goalModalClose.disabled=true;goalModal.hidden=true;document.body.classList.remove('modal-open');try{await produceVideo();}finally{processingActive=false;goalChoices.forEach(item=>item.disabled=false);goalModalClose.disabled=false;}}));
 goalModalClose.addEventListener('click',closeGoalModal);goalModal.addEventListener('click',event=>{if(event.target?.hasAttribute('data-close-goal-modal'))closeGoalModal();});document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!goalModal.hidden)closeGoalModal();});
 detailsToggle.addEventListener('click',()=>{const expanded=detailsToggle.getAttribute('aria-expanded')==='true';detailsToggle.setAttribute('aria-expanded',String(!expanded));metadataDetails.hidden=expanded;detailsToggle.textContent=expanded?'View details':'Hide details';});
 newVideoBtn.addEventListener('click',startNew);downloadBtn.addEventListener('click',()=>download(previewUrl));
