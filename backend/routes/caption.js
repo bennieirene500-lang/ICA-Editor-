@@ -31,6 +31,8 @@ import { createProductionAss } from '../visuals/createProductionAss.js';
 import { renderProductionVideo } from '../visuals/renderProductionVideo.js';
 import { buildSoundCues } from '../visuals/motionLibrary.js';
 
+const MAX_VIDEO_DURATION_SECONDS = 60;
+
 export function createCaptionRouter({
   uploadsDir,
   tempDir,
@@ -182,6 +184,15 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
     const originalMetadata = await timer.stage('probeVideo (original)', () =>
       probeVideo({ ffmpegPath, inputPath })
     );
+
+    if (originalMetadata.duration > MAX_VIDEO_DURATION_SECONDS) {
+      const error = new Error(
+        `ICA can only produce videos up to ${MAX_VIDEO_DURATION_SECONDS} seconds long. This recording is ${Math.round(originalMetadata.duration)}s — trim it and try again.`
+      );
+      error.status = 400;
+      error.code = 'VIDEO_TOO_LONG';
+      throw error;
+    }
 
     const claim = await timer.stage('usageService.claim', () =>
       usageService.claim({

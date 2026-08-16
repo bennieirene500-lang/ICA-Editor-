@@ -44,7 +44,7 @@ const sidebarUsage=document.getElementById('sidebarUsage');
 const memberWelcome=document.getElementById('memberWelcome');
 const memberAvatar=document.getElementById('memberAvatar');
 
-const LIMITS={maxFileSizeBytes:500*1024*1024,minDurationSeconds:3,maxDurationSeconds:180};
+const LIMITS={maxFileSizeBytes:500*1024*1024,minDurationSeconds:3,maxDurationSeconds:60};
 let currentFile=null;
 let currentMetadata=null;
 let previewUrl=null;
@@ -124,7 +124,7 @@ function clearMeta(){metadataCard.classList.remove('visible');metadataDetails.hi
 function validateFile(file){if(!file)return'No video was selected.';if(!file.type.startsWith('video/'))return'ICA could not read this recording. Please choose another video.';if(file.size>LIMITS.maxFileSizeBytes)return'This recording is too large. Please choose a shorter recording.';return null;}
 
 function readMetadata(file){return new Promise((resolve,reject)=>{const video=document.createElement('video');const objectUrl=URL.createObjectURL(file);const cleanup=()=>{URL.revokeObjectURL(objectUrl);video.removeAttribute('src');};const timer=setTimeout(()=>{cleanup();reject(new Error('ICA could not read this video. Please try another recording.'));},12000);video.preload='metadata';video.onloadedmetadata=()=>{clearTimeout(timer);const metadata={duration:video.duration,width:video.videoWidth,height:video.videoHeight,size:file.size,format:format(file)};cleanup();resolve(metadata);};video.onerror=()=>{clearTimeout(timer);cleanup();reject(new Error('ICA could not open this video. Please try another recording.'));};video.src=objectUrl;});}
-function validateMetadata(metadata){if(metadata.duration<LIMITS.minDurationSeconds)return'This video is too short. Please use a recording longer than 3 seconds.';if(metadata.duration>LIMITS.maxDurationSeconds)return'This video is longer than 3 minutes. Please use a shorter recording.';return null;}
+function validateMetadata(metadata){if(metadata.duration<LIMITS.minDurationSeconds)return'This video is too short. Please use a recording longer than 3 seconds.';if(metadata.duration>LIMITS.maxDurationSeconds)return'This video is longer than 60 seconds. Please use a shorter recording.';return null;}
 
 function setAuthMessage(text='',type=''){authMessage.textContent=text;authMessage.className='auth-message';if(text)authMessage.classList.add('visible');if(type)authMessage.classList.add(type);}
 function showLogin(){document.body.classList.add('auth-locked');document.body.classList.remove('auth-loading');authGate.hidden=false;window.setTimeout(()=>loginEmail.focus(),50);}
