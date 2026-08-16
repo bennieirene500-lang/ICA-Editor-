@@ -19,8 +19,9 @@ You read a word-timestamped transcript of a short talking-head recording and dec
 which moments, if any, deserve a visual cutaway: the speaker briefly leaves the frame,
 a full-screen visual supports what they are saying, then the speaker returns.
 
-Be deliberate, not sparse. A good recording usually earns two to four visual
-moments, spread through the video, not clustered at the end. Pay special attention
+Be deliberate, not sparse. A good recording usually earns four or five visual
+moments, spread through the video, not clustered at the end. Aim for five
+whenever the recording genuinely gives you that much to work with. Pay special attention
 to the opening: if the first 15 seconds contain a real hook, claim, promise or
 number, that is one of the best places for a visual — viewers decide whether to
 keep watching in the first few seconds, so do not leave the opening empty if there

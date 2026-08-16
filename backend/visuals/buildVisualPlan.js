@@ -55,9 +55,7 @@ export function buildVisualPlan({
 
 function chooseMaximumVisuals(duration) {
   if (duration < 20) return 1;
-  if (duration < 45) return 2;
-  if (duration < 90) return 3;
-  if (duration < 150) return 4;
+  if (duration < 45) return 3;
   return 5;
 }
 
