@@ -56,7 +56,14 @@ find something calm and on-topic, not busy or distracting.
 
 Return only moments that are clearly and directly supported by what is actually said
 at that timestamp. Do not invent a process, comparison or statistic that was not
-really said. Never invent steps that were not actually listed.`;
+really said. Never invent steps that were not actually listed.
+
+Separately from the visual moments, also pick at most 6 words or short phrases from
+across the whole transcript that deserve visual emphasis in the burned-in captions —
+numbers, statistics, prices, and the single sharpest claim or two, not general topic
+words. Most recordings only truly earn 3 to 5. Return each exactly as it appears in
+the transcript. Emphasis only works if it is rare: if you are unsure whether a word
+is special enough, leave it out.`;
 
 const RESPONSE_SCHEMA = {
   type: 'json_schema',
@@ -67,6 +74,11 @@ const RESPONSE_SCHEMA = {
       type: 'object',
       additionalProperties: false,
       properties: {
+        emphasisWords: {
+          type: 'array',
+          maxItems: 6,
+          items: { type: 'string' }
+        },
         moments: {
           type: 'array',
           maxItems: 5,
@@ -96,7 +108,7 @@ const RESPONSE_SCHEMA = {
           }
         }
       },
-      required: ['moments']
+      required: ['moments', 'emphasisWords']
     }
   }
 };
@@ -121,7 +133,29 @@ export async function analyzeMoments({ apiKey, words, goal, duration }) {
   });
 
   const parsed = JSON.parse(response.choices[0].message.content);
-  return sanitizeMoments(parsed.moments, duration);
+  return {
+    moments: sanitizeMoments(parsed.moments, duration),
+    emphasisWords: sanitizeEmphasisWords(parsed.emphasisWords)
+  };
+}
+
+function sanitizeEmphasisWords(emphasisWords) {
+  if (!Array.isArray(emphasisWords)) return [];
+
+  const seen = new Set();
+  const result = [];
+
+  for (const raw of emphasisWords) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+    if (result.length >= 6) break;
+  }
+
+  return result;
 }
 
 function sanitizeMoments(moments, duration) {

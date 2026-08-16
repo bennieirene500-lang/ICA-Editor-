@@ -16,8 +16,8 @@ function accentSoft(card) {
 
 export function createProductionAss({ captions = [], cards = [] }) {
   const cardEvents = cards.flatMap(renderCard);
-  const captionEvents = captions.map(renderCaption);
   const captionAccent = cards.find(card => card.palette)?.palette.accentAss || DEFAULT_ACCENT_ASS;
+  const captionEvents = captions.map(group => renderCaption(group, captionAccent));
 
   return `${header(captionAccent)}${[...cardEvents, ...captionEvents].join('\n')}\n`;
 }
@@ -157,17 +157,29 @@ function parseNumber(value) {
   return { prefix: match[1], value: numeric, suffix: match[3] };
 }
 
-function renderCaption(group) {
+function renderCaption(group, captionAccent) {
   const breaks = new Set(group.lineBreakAfter || []);
   const words = group.words || [];
 
+  let elapsedMs = 0;
   const text = words.map((item, index) => {
-    const centiseconds = Math.max(
-      1,
-      Math.round((Number(item.end) - Number(item.start)) * 100)
-    );
+    const durationMs = Math.max(10, Math.round((Number(item.end) - Number(item.start)) * 1000));
+    const centiseconds = Math.max(1, Math.round(durationMs / 10));
     const separator = breaks.has(index) ? '\\N' : ' ';
-    return `{\\k${centiseconds}}${escapeAss(item.word)}${separator}`;
+    const startMs = elapsedMs;
+    elapsedMs += durationMs;
+
+    if (!item.emphasis) {
+      return `{\\k${centiseconds}}${escapeAss(item.word)}${separator}`;
+    }
+
+    const popMs = Math.min(160, Math.max(60, Math.round(durationMs * 0.4)));
+    return (
+      `{\\k${centiseconds}\\1c${captionAccent}` +
+      `\\t(${startMs},${startMs + popMs},\\fscx128\\fscy128)` +
+      `\\t(${startMs + popMs},${startMs + popMs + 120},\\fscx100\\fscy100)}` +
+      `${escapeAss(item.word)}{\\1c${WHITE}}${separator}`
+    );
   }).join('').trim();
 
   return dialogue({

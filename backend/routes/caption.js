@@ -20,6 +20,7 @@ import { buildDirectorPlan } from '../processor/buildDirectorPlan.js';
 import { renderDirectorVideo } from '../processor/renderDirectorVideo.js';
 import { detectFaceTrack, buildReframePlan } from '../processor/buildReframePlan.js';
 import { buildCaptionGroups } from '../processor/buildCaptions.js';
+import { applyCaptionEmphasis } from '../processor/applyCaptionEmphasis.js';
 import { createProducerDecision } from '../producer/producerBrain.js';
 import { analyzeMoments } from '../producer/analyzeMoments.js';
 import { generateVisualImages } from '../visuals/generateVisualImages.js';
@@ -325,7 +326,7 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
       })
     );
 
-    const [moments, reframePlan] = await Promise.all([
+    const [{ moments, emphasisWords }, reframePlan] = await Promise.all([
       timer.stage('analyzeMoments (OpenAI, real understanding)', () =>
         analyzeMoments({
           apiKey,
@@ -423,11 +424,13 @@ async function produceVideo({ req, inputPath, tempDir, outputsDir, ffmpegPath, u
     });
     if (!captions.length) throw new Error('ICA could not detect clear speech in this recording.');
 
+    const emphasizedCaptions = applyCaptionEmphasis(captions, emphasisWords);
+
     const soundCues = await timer.stage('buildSoundCues', () => buildSoundCues(visualPlan));
 
     await timer.stage('write .ass caption+card files', () =>
       Promise.all([
-        fsp.writeFile(productionAssPath, createProductionAss({ captions, cards: cardVisuals }), 'utf8'),
+        fsp.writeFile(productionAssPath, createProductionAss({ captions: emphasizedCaptions, cards: cardVisuals }), 'utf8'),
         fsp.writeFile(cardOnlyAssPath, createProductionAss({ captions: [], cards: cardVisuals }), 'utf8')
       ])
     );
