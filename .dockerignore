@@ -3,6 +3,7 @@
 .env
 .env.*
 node_modules
+.venv-vision
 uploads
 outputs
 temp
